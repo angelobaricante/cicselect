@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test-db": "node scripts/test-supabase-connection.js"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",

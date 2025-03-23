@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { X, Plus, ChevronDown, ChevronUp } from "lucide-react"
+import { X, Plus, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react"
+import { createCampaign, createPositions, createCandidates } from "@/lib/db/campaign-service"
 
 type Candidate = {
   id: string
@@ -30,14 +31,8 @@ export default function CreateCampaignPage() {
   const [newPosition, setNewPosition] = useState("")
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [expandedPosition, setExpandedPosition] = useState<string | null>(null)
-
-  // New candidate form
-  const [newCandidate, setNewCandidate] = useState<Partial<Candidate>>({
-    name: "",
-    course: "",
-    position: "",
-    platform: "",
-  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [activeTab, setActiveTab] = useState("details")
 
   useEffect(() => {
     const userData = localStorage.getItem("user")
@@ -139,9 +134,14 @@ export default function CreateCampaignPage() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const changeTab = useCallback((tab: string) => {
+    setActiveTab(tab)
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Form validations
     if (!title.trim()) {
       toast({
         title: "Missing Title",
@@ -169,15 +169,83 @@ export default function CreateCampaignPage() {
       return
     }
 
-    toast({
-      title: "Election Created",
-      description: "Your election has been created",
-    })
+    if (candidates.length === 0) {
+      toast({
+        title: "No Candidates",
+        description: "Please add at least one candidate",
+        variant: "destructive",
+      })
+      return
+    }
 
-    setTimeout(() => {
-      router.push("/admin/dashboard")
-    }, 1500)
+    try {
+      setIsSubmitting(true)
+
+      // Create campaign
+      console.log('Creating campaign with data:', { title, deadline })
+      const campaignData = await createCampaign({
+        title,
+        deadline,
+      })
+      console.log('Campaign created:', campaignData)
+
+      // Prepare positions data
+      const positionsData = positions.map(position => ({
+        campaign_id: campaignData.id as string,
+        name: position,
+      }))
+      console.log('Creating positions:', positionsData)
+
+      // Create positions
+      const createdPositions = await createPositions(positionsData)
+      console.log('Positions created:', createdPositions)
+
+      // Create a map of position names to their IDs
+      const positionMap = createdPositions.reduce((map, position) => {
+        map[position.name] = position.id as string
+        return map
+      }, {} as Record<string, string>)
+
+      // Prepare candidates data
+      const candidatesData = candidates.map(candidate => ({
+        position_id: positionMap[candidate.position],
+        name: candidate.name,
+        course: candidate.course,
+        platform: candidate.platform,
+      }))
+      console.log('Creating candidates:', candidatesData)
+
+      // Create candidates
+      const createdCandidates = await createCandidates(candidatesData)
+      console.log('Candidates created:', createdCandidates)
+
+      toast({
+        title: "Election Created",
+        description: "Your election has been successfully created",
+      })
+
+      setTimeout(() => {
+        router.push("/admin/dashboard")
+      }, 1500)
+    } catch (error) {
+      console.error("Error creating election:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "There was a problem creating your election",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
+
+  // New candidate form
+  const [newCandidate, setNewCandidate] = useState<Partial<Candidate>>({
+    name: "",
+    course: "",
+    position: "",
+    platform: "",
+  })
 
   return (
     <div className="min-h-screen">
@@ -187,10 +255,10 @@ export default function CreateCampaignPage() {
             Back
           </Button>
           <h1 className="text-xl font-bold">Create New Election</h1>
-          <div className="hidden sm:block sm:w-[70px]"></div> {/* Spacer for alignment on desktop */}
+          <div className="hidden sm:block sm:w-[70px]"></div>
         </div>
 
-        <Tabs defaultValue="details" className="mx-auto max-w-4xl">
+        <Tabs value={activeTab} onValueChange={changeTab} className="mx-auto max-w-4xl">
           <TabsList className="mb-4 grid w-full grid-cols-2">
             <TabsTrigger value="details">Election Details</TabsTrigger>
             <TabsTrigger value="candidates">Add Candidates</TabsTrigger>
@@ -263,7 +331,7 @@ export default function CreateCampaignPage() {
               </div>
 
               <div className="flex justify-end pt-4">
-                <Button type="button" onClick={() => document.querySelector('[data-value="candidates"]')?.click()}>
+                <Button type="button" onClick={() => changeTab("candidates")}>
                   Next: Add Candidates
                 </Button>
               </div>
@@ -414,12 +482,12 @@ export default function CreateCampaignPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => document.querySelector('[data-value="details"]')?.click()}
+                  onClick={() => changeTab("details")}
                 >
                   Back to Details
                 </Button>
-                <Button type="button" onClick={handleSubmit}>
-                  Create Election
+                <Button type="button" onClick={handleSubmit} disabled={isSubmitting}>
+                  {isSubmitting ? "Creating..." : "Create Election"}
                 </Button>
               </div>
             </div>
