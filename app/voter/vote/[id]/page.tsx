@@ -100,17 +100,17 @@ export default function VotePage() {
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 md:px-8 lg:px-10">
-        <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between text-[#2a61aa] hover:text-[#2a61aa]">
           <Button variant="outline" size="sm" onClick={() => router.push("/voter/dashboard")}>
             Back
           </Button>
-          <h1 className="text-xl font-bold">{campaign?.title}</h1>
+          <h1 className="text-xl font-bold text-white">{campaign?.title}</h1>
           <div className="hidden sm:block sm:w-[70px]"></div> {/* Spacer for alignment on desktop */}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
           {campaign?.positions.map((position) => (
-            <div key={position} className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+            <div key={position} className="flex flex-col rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm bg-white/80 dark:bg-gray-800/80">
               <h2 className="mb-3 font-medium">{position}</h2>
               <RadioGroup
                 value={selections[position]}
@@ -142,7 +142,7 @@ export default function VotePage() {
         </div>
 
         <div className="mt-6 flex justify-end">
-          <Button onClick={handleSubmitVote}>Submit Vote</Button>
+            <Button onClick={handleSubmitVote}>Submit Vote</Button>
         </div>
       </div>
     </div>

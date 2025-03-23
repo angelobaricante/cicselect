@@ -64,32 +64,32 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <h1 className="mb-6 text-center text-xl font-bold">{role === "voter" ? "Student Login" : "Admin Login"}</h1>
+        <h1 className="mb-6 text-white text-center text-3xl font-bold">{role === "voter" ? "Student Login" : "Admin Login"}</h1>
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="srCode">{role === "voter" ? "SR Code" : "Admin ID"}</Label>
+            <Label htmlFor="srCode" className="text-[#2f478d]">{role === "voter" ? "SR Code" : "Admin ID"}</Label>
             <Input
               id="srCode"
               placeholder={role === "voter" ? "SR12345678" : "admin"}
               value={srCode}
               onChange={(e) => setSrCode(e.target.value)}
             />
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-white">
               {role === "voter" ? "Demo: use any SR code starting with 'SR'" : "Demo: use 'admin'"}
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password" className="text-[#2f478d]">Password</Label>
             <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <p className="text-xs text-gray-500">{role === "voter" ? "Demo: use 'password'" : "Demo: use 'admin'"}</p>
+            <p className="text-xs text-white">{role === "voter" ? "Demo: use 'password'" : "Demo: use 'admin'"}</p>
           </div>
-          <Button type="submit" className="w-full">
+          <Button type="submit" className="w-full bg-[#2a61aa] hover:bg-[#2f478d]">
             Login
           </Button>
           <Button
             type="button"
             variant="link"
-            className="w-full"
+            className="w-full text-[#2a61aa]"
             onClick={() => router.push(`/login?role=${role === "voter" ? "admin" : "voter"}`)}
           >
             Switch to {role === "voter" ? "Admin" : "Student"} Login
