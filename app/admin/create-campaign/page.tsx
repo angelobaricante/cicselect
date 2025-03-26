@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,8 +10,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useToast } from "@/hooks/use-toast"
 import { X, Plus, ChevronDown, ChevronUp } from "lucide-react"
+import { toast } from "sonner"
 
 type Candidate = {
   id: string
@@ -21,15 +21,29 @@ type Candidate = {
   platform?: string
 }
 
+type Election = {
+  id: string
+  title: string
+  deadline: string
+  positions: string[]
+  candidates: Candidate[]
+  createdAt: string
+  status: 'active' | 'completed' | 'upcoming'
+}
+
 export default function CreateCampaignPage() {
   const router = useRouter()
-  const { toast } = useToast()
+  const [activeTab, setActiveTab] = useState("details")
   const [title, setTitle] = useState("")
   const [deadline, setDeadline] = useState("")
   const [positions, setPositions] = useState<string[]>(["President", "Vice President", "Secretary"])
   const [newPosition, setNewPosition] = useState("")
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [expandedPosition, setExpandedPosition] = useState<string | null>(null)
+  
+  // Refs for tab navigation
+  const candidatesTabRef = useRef<HTMLButtonElement>(null)
+  const detailsTabRef = useRef<HTMLButtonElement>(null)
 
   // New candidate form
   const [newCandidate, setNewCandidate] = useState<Partial<Candidate>>({
@@ -76,28 +90,22 @@ export default function CreateCampaignPage() {
   const handleAddCandidate = () => {
     // Validate form
     if (!newCandidate.name?.trim()) {
-      toast({
-        title: "Missing Name",
-        description: "Please provide the candidate's name.",
-        variant: "destructive",
+      toast.error("Missing Name", {
+        description: "Please provide the candidate's name."
       })
       return
     }
 
     if (!newCandidate.course?.trim()) {
-      toast({
-        title: "Missing Course",
-        description: "Please provide the candidate's course.",
-        variant: "destructive",
+      toast.error("Missing Course", {
+        description: "Please provide the candidate's course."
       })
       return
     }
 
     if (!newCandidate.position?.trim()) {
-      toast({
-        title: "Missing Position",
-        description: "Please select a position for the candidate.",
-        variant: "destructive",
+      toast.error("Missing Position", {
+        description: "Please select a position for the candidate."
       })
       return
     }
@@ -121,9 +129,8 @@ export default function CreateCampaignPage() {
       platform: "",
     })
 
-    toast({
-      title: "Candidate Added",
-      description: "The candidate has been successfully added.",
+    toast.success("Candidate Added", {
+      description: "The candidate has been successfully added."
     })
   }
 
@@ -139,44 +146,112 @@ export default function CreateCampaignPage() {
     }
   }
 
+  // Storage utility functions
+  const saveElection = (election: Election) => {
+    // Get existing elections
+    const existingElectionsJSON = localStorage.getItem('elections')
+    const existingElections: Election[] = existingElectionsJSON 
+      ? JSON.parse(existingElectionsJSON) 
+      : []
+    
+    // Add new election
+    existingElections.push(election)
+    
+    // Save back to localStorage
+    localStorage.setItem('elections', JSON.stringify(existingElections))
+  }
+  
+  const getElectionStatus = (deadline: string): 'active' | 'completed' | 'upcoming' => {
+    const deadlineDate = new Date(deadline)
+    const now = new Date()
+    
+    // Set time to end of day
+    deadlineDate.setHours(23, 59, 59, 999)
+    
+    if (now > deadlineDate) {
+      return 'completed'
+    } else if (now.toDateString() === deadlineDate.toDateString()) {
+      return 'active'
+    } else {
+      return 'upcoming'
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Validate title
     if (!title.trim()) {
-      toast({
-        title: "Missing Title",
-        description: "Please provide a title for the election",
-        variant: "destructive",
+      toast.error("Missing Title", {
+        description: "Please provide a title for the election. This helps voters identify the election."
       })
+      setActiveTab("details")
       return
     }
 
+    // Validate deadline
     if (!deadline) {
-      toast({
-        title: "Missing Deadline",
-        description: "Please set a deadline for the election",
-        variant: "destructive",
+      toast.error("Missing Deadline", {
+        description: "Please set a deadline for the election. This determines when voting will end."
       })
+      setActiveTab("details")
       return
     }
 
+    // Validate positions
     if (positions.length === 0) {
-      toast({
-        title: "No Positions",
-        description: "Please add at least one position",
-        variant: "destructive",
+      toast.error("No Positions Added", {
+        description: "Please add at least one position for candidates to run for."
       })
+      setActiveTab("details")
+      return
+    }
+    
+    // Validate candidates
+    if (candidates.length === 0) {
+      toast.error("No Candidates Added", {
+        description: "Please add at least one candidate to the election."
+      })
+      setActiveTab("candidates")
       return
     }
 
-    toast({
-      title: "Election Created",
-      description: "Your election has been created",
+    // Check if all positions have candidates
+    const positionsWithoutCandidates = positions.filter(
+      position => !candidates.some(candidate => candidate.position === position)
+    )
+
+    if (positionsWithoutCandidates.length > 0) {
+      toast.error("Missing Candidates", {
+        description: `The following positions have no candidates: ${positionsWithoutCandidates.join(", ")}`
+      })
+      setActiveTab("candidates")
+      return
+    }
+    
+    // Create election object
+    const election: Election = {
+      id: `election_${Date.now()}`,
+      title,
+      deadline,
+      positions,
+      candidates,
+      createdAt: new Date().toISOString(),
+      status: getElectionStatus(deadline)
+    }
+    
+    // Save to localStorage
+    saveElection(election)
+
+    // Show success message with election details
+    toast.success("Election Created Successfully! 🎉", {
+      description: `"${title}" has been created with ${candidates.length} candidates across ${positions.length} positions. Redirecting to dashboard...`,
+      duration: 5000
     })
 
     setTimeout(() => {
       router.push("/admin/dashboard")
-    }, 1500)
+    }, 2000) // Increased delay to ensure user sees the success message
   }
 
   return (
@@ -190,10 +265,10 @@ export default function CreateCampaignPage() {
           <div className="hidden sm:block sm:w-[70px]"></div> {/* Spacer for alignment on desktop */}
         </div>
 
-        <Tabs defaultValue="details" className="mx-auto max-w-4xl">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mx-auto max-w-4xl">
           <TabsList className="mb-4 grid w-full grid-cols-2">
-            <TabsTrigger value="details">Election Details</TabsTrigger>
-            <TabsTrigger value="candidates">Add Candidates</TabsTrigger>
+            <TabsTrigger value="details" ref={detailsTabRef}>Election Details</TabsTrigger>
+            <TabsTrigger value="candidates" ref={candidatesTabRef}>Add Candidates</TabsTrigger>
           </TabsList>
 
           <TabsContent value="details">
@@ -263,7 +338,10 @@ export default function CreateCampaignPage() {
               </div>
 
               <div className="flex justify-end pt-4">
-                <Button type="button" onClick={() => document.querySelector('[data-value="candidates"]')?.click()}>
+                <Button 
+                  type="button" 
+                  onClick={() => setActiveTab("candidates")}
+                >
                   Next: Add Candidates
                 </Button>
               </div>
@@ -414,7 +492,7 @@ export default function CreateCampaignPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => document.querySelector('[data-value="details"]')?.click()}
+                  onClick={() => setActiveTab("details")}
                 >
                   Back to Details
                 </Button>

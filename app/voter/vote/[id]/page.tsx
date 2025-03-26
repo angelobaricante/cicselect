@@ -5,62 +5,102 @@ import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { useToast } from "@/hooks/use-toast"
-import { mockCampaigns, mockCandidates } from "@/lib/mock-data"
+import { toast } from "sonner"
 import type { Campaign, Candidate } from "@/lib/types"
+import { addVote, hasVoted } from "@/lib/vote-utils"
+
+type User = {
+  id: string
+  name: string
+  role: string
+}
 
 export default function VotePage() {
   const router = useRouter()
   const params = useParams()
-  const { toast } = useToast()
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [candidates, setCandidates] = useState<Record<string, Candidate[]>>({})
   const [selections, setSelections] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    if (!userData) {
-      router.push("/login?role=voter")
-      return
+    const checkAuth = async () => {
+      const userData = localStorage.getItem("user")
+      if (!userData) {
+        router.push("/login?role=voter")
+        return false
+      }
+
+      const parsedUser = JSON.parse(userData) as User
+      if (parsedUser.role !== "voter") {
+        router.push("/login?role=voter")
+        return false
+      }
+
+      setUser(parsedUser)
+      return parsedUser
     }
 
-    const parsedUser = JSON.parse(userData)
-    if (parsedUser.role !== "voter") {
-      router.push("/login?role=voter")
-      return
-    }
+    const loadElection = async (parsedUser: User) => {
+      const campaignId = params.id as string
+      
+      // Get election from localStorage
+      const electionsData = localStorage.getItem("elections")
+      if (!electionsData) {
+        toast.error("No Elections Found")
+        router.push("/voter/dashboard")
+        return
+      }
+      
+      const elections = JSON.parse(electionsData)
+      const foundCampaign = elections.find((c: Campaign) => c.id === campaignId)
 
-    const campaignId = params.id as string
-    const foundCampaign = mockCampaigns.find((c) => c.id === campaignId)
+      if (!foundCampaign) {
+        toast.error("Election Not Found")
+        router.push("/voter/dashboard")
+        return
+      }
 
-    if (!foundCampaign || foundCampaign.hasVoted || new Date(foundCampaign.deadline) <= new Date()) {
-      toast({
-        title: "Cannot Vote",
-        description: foundCampaign?.hasVoted
-          ? "You have already voted in this election"
-          : "This election is not available for voting",
-        variant: "destructive",
-      })
-      router.push("/voter/dashboard")
-      return
-    }
+      // Check if user has already voted
+      if (hasVoted(campaignId, parsedUser.id)) {
+        toast.error("Already Voted")
+        router.push("/voter/dashboard")
+        return
+      }
 
-    setCampaign(foundCampaign)
+      // Check if election is still active
+      if (new Date(foundCampaign.deadline) <= new Date()) {
+        toast.error("Election Closed")
+        router.push("/voter/dashboard")
+        return
+      }
 
-    const candidatesByPosition: Record<string, Candidate[]> = {}
-    mockCandidates
-      .filter((candidate) => candidate.campaignId === campaignId)
-      .forEach((candidate) => {
+      setCampaign(foundCampaign)
+
+      // Group candidates by position
+      const candidatesByPosition: Record<string, Candidate[]> = {}
+      foundCampaign.candidates.forEach((candidate: Candidate) => {
         if (!candidatesByPosition[candidate.position]) {
           candidatesByPosition[candidate.position] = []
         }
         candidatesByPosition[candidate.position].push(candidate)
       })
 
-    setCandidates(candidatesByPosition)
-    setLoading(false)
-  }, [params.id, router, toast])
+      setCandidates(candidatesByPosition)
+      setLoading(false)
+    }
+
+    const initializePage = async () => {
+      const user = await checkAuth()
+      if (user) {
+        await loadElection(user)
+      }
+    }
+
+    initializePage()
+  }, [params.id, router])
 
   const handleSelectionChange = (position: string, candidateId: string) => {
     setSelections((prev) => ({
@@ -69,30 +109,31 @@ export default function VotePage() {
     }))
   }
 
-  const handleSubmitVote = () => {
+  const handleSubmitVote = async () => {
+    if (isSubmitting) return
+
     const positions = campaign?.positions || []
     const missingSelections = positions.filter((position) => !selections[position])
 
     if (missingSelections.length > 0) {
-      toast({
-        title: "Incomplete Selections",
-        description: `Please select a candidate for all positions`,
-        variant: "destructive",
-      })
+      toast.error("Please select a candidate for all positions")
       return
     }
 
-    toast({
-      title: "Vote Submitted",
-      description: "Your vote has been recorded",
-    })
-
-    const updatedCampaigns = mockCampaigns.map((c) => (c.id === campaign?.id ? { ...c, hasVoted: true } : c))
-    localStorage.setItem("campaigns", JSON.stringify(updatedCampaigns))
-
-    setTimeout(() => {
-      router.push("/voter/dashboard")
-    }, 1500)
+    try {
+      setIsSubmitting(true)
+      
+      // Record the vote in localStorage
+      if (campaign && user) {
+        addVote(campaign.id, user.id, selections)
+        toast.success("Vote Submitted Successfully! 🎉")
+        router.push("/voter/dashboard")
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to submit vote")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (loading) return <div className="p-4">Loading...</div>
@@ -105,7 +146,7 @@ export default function VotePage() {
             Back
           </Button>
           <h1 className="text-xl font-bold">{campaign?.title}</h1>
-          <div className="hidden sm:block sm:w-[70px]"></div> {/* Spacer for alignment on desktop */}
+          <div className="hidden sm:block sm:w-[70px]"></div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -142,7 +183,9 @@ export default function VotePage() {
         </div>
 
         <div className="mt-6 flex justify-end">
-          <Button onClick={handleSubmitVote}>Submit Vote</Button>
+          <Button onClick={handleSubmitVote} disabled={isSubmitting}>
+            {isSubmitting ? "Submitting..." : "Submit Vote"}
+          </Button>
         </div>
       </div>
     </div>

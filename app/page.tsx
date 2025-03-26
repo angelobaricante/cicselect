@@ -1,7 +1,21 @@
+"use client"
+
+import { useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 
 export default function Home() {
+  useEffect(() => {
+    // Clear any previous user session when landing on the home page
+    localStorage.removeItem("user")
+    
+    // Welcome message
+    toast.info("Welcome to CICSelect", {
+      description: "Please choose your login method to continue.",
+    })
+  }, [])
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10 sm:py-16">
       <div className="w-full max-w-md text-center">
