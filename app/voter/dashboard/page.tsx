@@ -3,35 +3,86 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { mockCampaigns } from "@/lib/mock-data"
+import { toast } from "sonner"
 import type { Campaign } from "@/lib/types"
+import { hasVoted } from "@/lib/vote-utils"
+
+type User = {
+  id: string
+  name: string
+  role: string
+}
 
 export default function VoterDashboard() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
+  const [votedElections, setVotedElections] = useState<string[]>([])
 
   useEffect(() => {
     const userData = localStorage.getItem("user")
     if (!userData) {
+      toast.error("Authentication Required", {
+        description: "Please login to access the voter dashboard."
+      })
       router.push("/login?role=voter")
       return
     }
 
     const parsedUser = JSON.parse(userData)
     if (parsedUser.role !== "voter") {
+      toast.error("Access Denied", {
+        description: "You don't have permission to access the voter dashboard."
+      })
       router.push("/login?role=voter")
       return
     }
 
     setUser(parsedUser)
-    setCampaigns(mockCampaigns)
+    
+    // Get elections from localStorage instead of mock data
+    const electionsData = localStorage.getItem("elections")
+    if (electionsData) {
+      try {
+        const elections = JSON.parse(electionsData)
+        setCampaigns(elections)
+        
+        // Check if the user has voted in each election
+        const votedIds = elections.map((election: Campaign) => 
+          hasVoted(election.id, parsedUser.id) ? election.id : null
+        ).filter(Boolean)
+        
+        setVotedElections(votedIds)
+        
+        const activeElections = elections.filter(
+          (election: Campaign) => new Date(election.deadline) > new Date()
+        )
+        
+        if (activeElections.length > 0) {
+          toast.success(`Welcome ${parsedUser.name}`, {
+            description: `There are ${activeElections.length} active election${activeElections.length !== 1 ? 's' : ''} available.`
+          })
+        }
+      } catch {
+        toast.error("Data Loading Error", {
+          description: "There was a problem loading the election data."
+        })
+      }
+    } else {
+      toast.info("No Elections Available", {
+        description: "There are currently no elections available."
+      })
+    }
+
     setLoading(false)
   }, [router])
 
   const handleLogout = () => {
     localStorage.removeItem("user")
+    toast.success("Logged Out", {
+      description: "You have been successfully logged out."
+    })
     router.push("/")
   }
 
@@ -61,6 +112,8 @@ export default function VoterDashboard() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {campaigns.map((campaign) => {
             const isActive = new Date(campaign.deadline) > new Date()
+            const hasUserVoted = votedElections.includes(campaign.id)
+            
             return (
               <div
                 key={campaign.id}
@@ -70,7 +123,7 @@ export default function VoterDashboard() {
                   <div className="flex items-start justify-between">
                     <h2 className="font-medium">{campaign.title}</h2>
                     <div className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium dark:bg-gray-700">
-                      {isActive ? (campaign.hasVoted ? "Voted" : "Not Voted") : "Closed"}
+                      {isActive ? (hasUserVoted ? "Voted" : "Not Voted") : "Closed"}
                     </div>
                   </div>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -84,10 +137,10 @@ export default function VoterDashboard() {
                     <Button
                       className="w-full"
                       size="sm"
-                      disabled={campaign.hasVoted}
+                      disabled={hasUserVoted}
                       onClick={() => handleVote(campaign.id)}
                     >
-                      {campaign.hasVoted ? "Already Voted" : "Vote Now"}
+                      {hasUserVoted ? "Already Voted" : "Vote Now"}
                     </Button>
                   ) : (
                     <Button
